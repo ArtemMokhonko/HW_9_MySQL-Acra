@@ -1,0 +1,141 @@
+version: "3"
+
+volumes:
+  acra-server:
+
+services:
+  # Creating keys:
+  # - ./.acrakeys/acra-server/${ACRA_CLIENT_ID}_storage
+  # - ./.acrakeys/acra-writer/${ACRA_CLIENT_ID}_storage.pub
+  acra-keymaker_client:
+    image: "cossacklabs/acra-keymaker:${ACRA_DOCKER_IMAGE_TAG:-0.95.0}"
+    network_mode: "none"
+    environment:
+      ACRA_MASTER_KEY: ${ACRA_SERVER_MASTER_KEY:-N0MyZEVCRGY1cHA4ODRSVHp3c3BNeGtDekxaV3BhTHI=}
+    volumes:
+      - acra-server:/keys
+      - ../_common/ssl/acra-client/:/ssl:ro
+    command: >-
+      --client_id=""
+      --tls_cert=/ssl/acra-client.crt
+      --keys_output_dir=/keys/acra-server
+      --keys_public_output_dir=/keys/acra-server
+      --keystore=v1
+
+  mysql:
+    build:
+      context: ../
+      dockerfile: _common/mysql-playground/mysql-playground.dockerfile
+      args:
+        VCS_URL: ${COSSACKLABS_ACRAENGDEMO_VCS_URL}
+        VCS_REF: ${COSSACKLABS_ACRAENGDEMO_VCS_REF}
+        VCS_BRANCH: ${COSSACKLABS_ACRAENGDEMO_VCS_BRANCH}
+        BUILD_DATE: ${COSSACKLABS_ACRAENGDEMO_BUILD_DATE}
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_PASSWORD:-test}
+      MYSQL_USER: ${MYSQL_USER:-test}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-test}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-test}
+    ports:
+      - "3306:3306"
+
+      - server-mysql
+      - world
+      - webui-mysql
+
+  acra-server:
+    image: "cossacklabs/acra-server:${ACRA_DOCKER_IMAGE_TAG:-0.95.0}"
+    restart: always
+    depends_on:
+      - acra-keymaker_client
+      - mysql
+    environment:
+      ACRA_MASTER_KEY: ${ACRA_SERVER_MASTER_KEY:-N0MyZEVCRGY1cHA4ODRSVHp3c3BNeGtDekxaV3BhTHI=}
+      GODEBUG: "netdns=go"   
+    networks:
+      - server-mysql
+      - world
+    ports:
+      - "9393:9393"
+    volumes:
+      - acra-server:/data
+      - ../_common/ssl/acra-server/:/ssl
+      - ../_common/ssl/ca/ca.crt:/ssl/root.crt
+      - ./acra-server-config:/config
+    command: >-
+      --token_db=/data/token.db
+      --keys_dir=/data/acra-server
+      --http_api_enable
+      --tls_auth=4
+      --tls_ca=/ssl/root.crt
+      --tls_cert=/ssl/acra-server.crt
+      --tls_key=/ssl/acra-server.key
+      --tls_client_id_from_cert
+      --tls_identifier_extractor_type=distinguished_name
+      --incoming_connection_api_string=tcp://0.0.0.0:9090
+      --incoming_connection_string=tcp://0.0.0.0:9393
+      --v
+      --tls_ocsp_from_cert=ignore
+      --tls_crl_from_cert=ignore
+      --config_file=/config/acra-server.yaml
+      --incoming_connection_prometheus_metrics_string=tcp://0.0.0.0:9399
+
+  phpmyadmin:
+    build:
+      context: ../
+      dockerfile: ./_common/phpmyadmin/phpmyadmin.dockerfile
+      args:
+        VCS_URL: ${COSSACKLABS_ACRA_VCS_URL}
+        VCS_REF: ${COSSACKLABS_ACRA_VCS_REF}
+        VCS_BRANCH: ${COSSACKLABS_ACRA_VCS_BRANCH}
+        BUILD_DATE: ${COSSACKLABS_ACRAENGDEMO_BUILD_DATE}
+    networks:
+      - webui-mysql
+      - world
+    depends_on:
+      - mysql
+    ports:
+      - 8080:80
+    environment:
+      - PMA_ARBITRARY=1
+      - PMA_HOST=mysql
+      - PMA_USER=root
+      - PMA_PASSWORD=test
+      - PMA_PORT=3306
+  phpmyadmin2:
+    build:
+      context: ../
+      dockerfile: ./_common/phpmyadmin/phpmyadmin.dockerfile
+      args:
+        VCS_URL: ${COSSACKLABS_ACRA_VCS_URL}
+        VCS_REF: ${COSSACKLABS_ACRA_VCS_REF}
+        VCS_BRANCH: ${COSSACKLABS_ACRA_VCS_BRANCH}
+        BUILD_DATE: ${COSSACKLABS_ACRAENGDEMO_BUILD_DATE}
+    
+    networks:
+      - webui-mysql
+      - world
+    depends_on:
+      - acra-server
+      - mysql
+    ports:
+      - "8081:80"
+    volumes:
+      - ../_common/ssl/acra-client/:/ssl
+      - ../_common/ssl/ca/ca.crt:/ssl/root.crt      
+    environment:
+      PMA_HOST: acra-server
+      PMA_PORT: 9393
+      PMA_USER: root
+      PMA_PASSWORD: test
+      PMA_SSL: "true"
+      PMA_SSL_CA: "/ssl/ca.crt"
+      PMA_SSL_CERT: "/ssl/acra-client.crt"
+      PMA_SSL_KEY: "/ssl/acra-client.key"
+
+networks:
+  world:
+  server-mysql:
+    internal: true
+  webui-mysql:
+    internal: true

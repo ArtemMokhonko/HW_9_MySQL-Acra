@@ -1,0 +1,74 @@
+defaults:
+  crypto_envelope: acrablock
+
+schemas:
+  - table: customers
+    columns:
+      - customer_id
+      - first_name
+      - last_name
+      - email
+      - phone
+      - address
+    encrypted:
+      - column: customer_id
+        token_type: str
+        tokenized: true
+      - column: first_name
+        token_type: str
+        tokenized: true
+      - column: last_name
+        token_type: str
+        tokenized: true
+      - column: email
+        token_type: email
+        tokenized: true
+      - column: phone
+        token_type: str
+        tokenized: true
+      - column: address
+        token_type: str
+        tokenized: true
+
+  - table: flower_categories
+    columns:
+      - category_id
+      - category_name
+    encrypted:
+      - column: category_name
+        token_type: str
+        tokenized: true
+
+  - table: flowers
+    columns:
+      - flower_id
+      - category_id
+      - flower_name
+      - price
+      - stock_quantity
+    encrypted:
+      - column: flower_name
+        token_type: str
+        tokenized: true
+      - column: price
+      - column: stock_quantity
+
+  - table: orders
+    columns:
+      - order_id
+      - customer_id
+      - order_date
+      - total_amount
+    encrypted:
+
+  - table: transactions
+    columns:
+      - transaction_id
+      - order_id
+      - transaction_date
+      - amount
+      - payment_method
+    encrypted:
+      - column: payment_method
+        token_type: str
+        tokenized: true
